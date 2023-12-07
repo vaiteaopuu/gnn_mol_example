@@ -1,0 +1,66 @@
+* Install
+** Create the conda env
+
+#+begin_src bash
+conda create -n gnn_env python=3.8
+conda activate gnn_env
+#+end_src
+
+** Install the packages
+
+#+begin_src bash
+conda install pytorch torchvision torchaudio -c pytorch
+pip install rdkit-pypi torch-geometric
+#+end_src
+
+** create the dataset
+
+#+begin_src python
+import pandas as pd
+from rdkit import Chem
+
+# URL to the Delaney dataset in CSV format
+url = "https://deepchemdata.s3-us-west-1.amazonaws.com/datasets/delaney-processed.csv"
+
+# Download and load the dataset
+df = pd.read_csv(url)
+
+selected_df = df[['smiles', 'measured log solubility in mols per litre']]
+
+# Renaming the columns for clarity
+selected_df.columns = ['SMILES', 'Solubility']
+
+# Save the selected data to a new CSV file
+selected_df.to_csv('solubility_dataset.csv', index=False)
+#+end_src
+
+** train the model
+
+#+begin_src python
+import pandas as pd
+from gnn import smiles_to_graph, SimpleGNN
+from torch import optim, nn
+from numpy import mean
+from torch_geometric.data import DataLoader
+
+df = pd.read_csv("solubility_dataset.csv")
+
+model = SimpleGNN()
+optimizer = optim.Adam(model.parameters(), lr=1e-3)
+criterion = nn.MSELoss()
+
+graphs = [smiles_to_graph(smiles, float(sol)) for smiles, sol in zip(df['SMILES'], df['Solubility'].values)]
+
+loader = DataLoader(graphs, batch_size=32, shuffle=True)
+
+loss_l = []
+for step in range(1):
+    for data in loader:
+        optimizer.zero_grad()
+        prediction = model(data)
+        loss = criterion(prediction, data.target)
+        loss.backward()
+        optimizer.step()
+        loss_l.append(loss.item())
+    print(mean(loss_l))
+#+end_src
